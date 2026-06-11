@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        task: [lint, test]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Install golangci-lint
+        if: matrix.task == 'lint'
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+          install-mode: binary
+
+      - name: Run
+        run: just ${{ matrix.task }}

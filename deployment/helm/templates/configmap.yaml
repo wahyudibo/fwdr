@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fwdr.fullname" . }}
+  labels:
+    {{- include "fwdr.labels" . | nindent 4 }}
+data:
+  settings.yaml: |
+    {{- range .Values.forwarders }}
+    - name: {{ .name }}
+      source: {{ .source }}
+      destination_port: {{ .destinationPort }}
+    {{- end }}

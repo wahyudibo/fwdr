@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fwdr
+description: TCP port forwarder — proxies local ports to remote hosts
+type: application
+version: 0.1.0
+appVersion: "latest"

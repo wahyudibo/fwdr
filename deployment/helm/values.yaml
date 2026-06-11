@@ -1,0 +1,19 @@
+image:
+  repository: wahyudibo/fwdr
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Mirrors settings.yaml.example — define one entry per forwarding rule.
+# For non-Kubernetes: copy settings.yaml.example to settings.yaml and populate the same fields.
+forwarders:
+  - name: example-connection
+    source: remote-host:8080
+    destinationPort: 8080
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

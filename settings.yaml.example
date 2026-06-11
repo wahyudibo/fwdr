@@ -1,0 +1,3 @@
+- name: <CONNECTION_NAME>
+  source: <REMOTE_HOST>:<REMOTE_PORT>
+  destination_port: <TUNNEL_PORT>
