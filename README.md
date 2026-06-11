@@ -1,16 +1,18 @@
 # fwdr
 
+Have a database, cache, or service that's only reachable inside a private network? Deploy fwdr on a Kubernetes cluster or bastion host with internal access and tunnel to those resources straight from your local machine.
+
 Dead simple TCP forwarder. Listens on a local port and proxies all traffic to a remote host — no config overhead, no dependencies, runs anywhere.
 
-Built for [Kubernetes port-forwarding](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/) workflows where you need persistent, self-restarting tunnels to remote services.
+Works with [Kubernetes port-forwarding](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/) for persistent, self-restarting tunnels — or run it directly on any bastion host.
 
 ## Features
 
 - Bidirectional TCP proxying
-- Multiple forwarding rules from a single `settings.yaml`
+- Multiple forwarding rules from a single `settings.yaml` — connect to multiple services, each mapped to its own local port
 - Graceful shutdown — active connections drain before exit
 - Kubernetes-native via Helm chart
-- Docker-ready for non-Kubernetes environments
+- Runs on any VPS or bastion host — drop in a Docker container or a single binary, no dependencies
 
 ## Requirements
 
@@ -20,108 +22,176 @@ Built for [Kubernetes port-forwarding](https://kubernetes.io/docs/tasks/access-a
 | Docker      | Docker Engine    |
 | Binary      | —                |
 
-## Configuration
+## Quick Start (Kubernetes)
 
-Create a `settings.yaml` with your forwarding rules:
-
-```yaml
-- name: my-database
-  source: db.internal:5432
-  destination_port: 5432
-
-- name: my-cache
-  source: cache.internal:6379
-  destination_port: 6379
-```
-
-| Field              | Description                            |
-|--------------------|----------------------------------------|
-| `name`             | Identifier for the connection (logging)|
-| `source`           | Remote `host:port` to forward to       |
-| `destination_port` | Local port to listen on                |
-
-## Installation
-
-### Kubernetes (Helm)
-
-Install directly from the OCI registry — no repo clone needed.
-
-```sh
-helm install fwdr oci://ghcr.io/wahyudibo/fwdr --version 1.0.0 \
-  --set forwarders[0].name=my-database \
-  --set forwarders[0].source=db.internal:5432 \
-  --set forwarders[0].destinationPort=5432
-```
-
-For multiple rules, use a `values.yaml` override file:
+Let's say you have a Kubernetes cluster and you need to access a database and cache that are only accessible in the internal network. Create a `values.yaml` with your forwarding rules:
 
 ```yaml
 # my-values.yaml
 forwarders:
   - name: my-database
-    source: db.internal:5432
-    destinationPort: 5432
+    source: <DATABASE_HOST>:<DATABASE_PORT>
+    destinationPort: <DATABASE_DESTINATION_PORT>
   - name: my-cache
-    source: cache.internal:6379
-    destinationPort: 6379
+    source: <CACHE_HOST>:<CACHE_PORT>
+    destinationPort: <CACHE_DESTINATION_PORT>
 ```
+
+| Field             | Description                                       |
+|-------------------|---------------------------------------------------|
+| `name`            | Identifier for the connection (logging)           |
+| `source`          | Remote `host:port` to forward to                  |
+| `destinationPort` | Container port exposed for `kubectl port-forward` |
+
+Deploy using the Helm chart:
 
 ```sh
-helm install fwdr oci://ghcr.io/wahyudibo/fwdr --version 1.0.0 -f my-values.yaml
+helm install -n <NAMESPACE> fwdr oci://ghcr.io/wahyudibo/fwdr --version <VERSION> -f my-values.yaml
 ```
 
-Forwarding rules are stored in a ConfigMap and mounted into the pod. The Deployment automatically restarts when the ConfigMap changes.
+Once the pods are running, look up the pod name and start port-forwarding:
+
+```sh
+kubectl get pods -n <NAMESPACE>
+kubectl -n <NAMESPACE> port-forward pod/<POD_NAME> <DESTINATION_PORT>
+```
+
+Your database/cache is now accessible at `localhost:<DESTINATION_PORT>`. To map to a different local port:
+
+```sh
+kubectl -n <NAMESPACE> port-forward pod/<POD_NAME> <LOCAL_PORT>:<DESTINATION_PORT>
+```
 
 **Upgrade**
 
 ```sh
-helm upgrade fwdr oci://ghcr.io/wahyudibo/fwdr --version 1.1.0 -f my-values.yaml
+helm upgrade -n <NAMESPACE> fwdr oci://ghcr.io/wahyudibo/fwdr --version <NEW_VERSION> -f my-values.yaml
 ```
+
+Forwarding rules live in a ConfigMap — the Deployment restarts automatically when the ConfigMap changes.
 
 **Uninstall**
 
 ```sh
-helm uninstall fwdr
+helm uninstall -n <NAMESPACE> fwdr
 ```
 
 ---
 
-### Docker
+## Docker
+
+Suitable for any VPS or bastion host with Docker installed. Create a `settings.yaml` with your forwarding rules:
+
+```yaml
+- name: my-database
+  source: <DATABASE_HOST>:<DATABASE_PORT>
+  destination_port: <DATABASE_DESTINATION_PORT>
+
+- name: my-cache
+  source: <CACHE_HOST>:<CACHE_PORT>
+  destination_port: <CACHE_DESTINATION_PORT>
+```
+
+Run with ports published to the host (add one `-p` per `destination_port`):
 
 ```sh
 docker run --rm \
   -v $(pwd)/settings.yaml:/app/settings.yaml \
+  -p <LOCAL_PORT>:<DESTINATION_PORT> \
   ghcr.io/wahyudibo/fwdr:latest
 ```
 
-Available on Docker Hub too:
+Also available on Docker Hub:
 
 ```sh
 docker run --rm \
   -v $(pwd)/settings.yaml:/app/settings.yaml \
+  -p <LOCAL_PORT>:<DESTINATION_PORT> \
   wahyudibo/fwdr:latest
+```
+
+Run as a persistent background service:
+
+```sh
+docker run -d --restart unless-stopped \
+  -v $(pwd)/settings.yaml:/app/settings.yaml \
+  -p <LOCAL_PORT>:<DESTINATION_PORT> \
+  --name fwdr \
+  ghcr.io/wahyudibo/fwdr:latest
 ```
 
 ---
 
-### Binary
+## Binary
 
-Download the latest binary for your platform from the [Releases](https://github.com/wahyudibo/fwdr/releases) page.
+The simplest option for a VPS or bastion host — single file, no runtime required. Download the latest binary for your platform from the [Releases](https://github.com/wahyudibo/fwdr/releases) page.
 
 ```sh
 # Linux (amd64)
-curl -L https://github.com/wahyudibo/fwdr/releases/latest/download/fwdr-linux-amd64 -o fwdr
+curl -L https://github.com/wahyudibo/fwdr/releases/latest/download/fwdr-linux-amd64.tar.gz | tar -xz
 chmod +x fwdr
 
 # macOS (Apple Silicon)
-curl -L https://github.com/wahyudibo/fwdr/releases/latest/download/fwdr-darwin-arm64 -o fwdr
+curl -L https://github.com/wahyudibo/fwdr/releases/latest/download/fwdr-darwin-arm64.tar.gz | tar -xz
 chmod +x fwdr
 ```
 
-Run a single forwarding rule:
+Run a forwarding rule:
 
 ```sh
-./fwdr --name my-database --source db.internal:5432 --destination-port 5432
+./fwdr --name my-database --source <DATABASE_HOST>:<DATABASE_PORT> --destination-port <DATABASE_DESTINATION_PORT>
+```
+
+For multiple forwarders, run each as a background process:
+
+```sh
+./fwdr --name my-database --source <DATABASE_HOST>:<DATABASE_PORT> --destination-port <DATABASE_DESTINATION_PORT> &
+./fwdr --name my-cache --source <CACHE_HOST>:<CACHE_PORT> --destination-port <CACHE_DESTINATION_PORT> &
+```
+
+**Running as a systemd service**
+
+To run fwdr at boot, set it up as a systemd service.
+
+1. Copy the binary:
+
+```sh
+sudo cp fwdr /usr/local/bin/fwdr
+```
+
+2. Copy the service unit and add your forwarding rule to `ExecStart`:
+
+```sh
+sudo cp deployment/systemd/fwdr.service /etc/systemd/system/fwdr.service
+sudo nano /etc/systemd/system/fwdr.service
+```
+
+Edit the `ExecStart` line with your flags:
+
+```ini
+ExecStart=/usr/local/bin/fwdr --name my-database --source <DATABASE_HOST>:<DATABASE_PORT> --destination-port <DATABASE_DESTINATION_PORT>
+```
+
+For multiple forwarders, create one service file per rule.
+
+3. Enable and start:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable fwdr
+sudo systemctl start fwdr
+```
+
+Check status:
+
+```sh
+systemctl status fwdr
+```
+
+Follow logs:
+
+```sh
+journalctl -u fwdr -f
 ```
 
 **Available flags**
@@ -130,7 +200,7 @@ Run a single forwarding rule:
 |---------------------|---------|----------------------------------------------|
 | `--name`            | —       | Connection name (required)                   |
 | `--source`          | —       | Remote `host:port` to forward to (required)  |
-| `--destination-port`| `8080`  | Local port to listen on (required)           |
+| `--destination-port`| `8080`  | Local port to listen on                      |
 | `--dial-timeout`    | `30s`   | Timeout when connecting to source            |
 
 ## License

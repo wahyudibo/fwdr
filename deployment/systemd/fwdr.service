@@ -1,0 +1,12 @@
+[Unit]
+Description=fwdr TCP forwarder
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/fwdr
+WorkingDirectory=/etc/fwdr
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
